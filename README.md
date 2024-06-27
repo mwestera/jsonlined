@@ -8,7 +8,7 @@ Sometimes I want to extract a value from each json line (say, the tweet's text u
 (like count the number of words, split it into sentences, or categorize its sentiment), and store the result under a new
 key in the original json dictionary.
 
-I wrote this small module to make this easier. Perhaps you will find it useful. I'm not an expert on bash/pipes/streams/subprocess/operating systems. No guarantees about it working correctly anywhere other than my own systems.
+I wrote this small module to make this easier. Perhaps you will find it useful. I'm not an expert on bash/pipes/streams/subprocess/json/operating systems. No guarantees about it working correctly anywhere other than my own computer.
 
 Suggestions, issues, pull requests welcome!
 
@@ -25,7 +25,7 @@ This will make two commands available in your shell:
 The latter is especially recommended for programs with substantial buildup/teardown.
 
 
-## Examples: ##
+## Examples ##
 
 Suppose we have a `.jsonl` file with social media posts like this:
 
@@ -54,3 +54,7 @@ $ cat test.jsonl | jsonpiped [python sentencize.py] id,text sentence | less
 Here jsonpiped is used, because sentence.py operates on lines (not waiting for EOF). This is especially recommended
 for programs with considerable buildup/teardown cost, e.g., loading a language model.
 
+
+## Related ##
+
+More or less the same can be achieved, with a bit of bash scripting, by using the much more sophisticated, faster, more general-purpose JSON Stream Editor [JJ](https://github.com/tidwall/jj).
