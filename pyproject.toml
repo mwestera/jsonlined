@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "jsonlined"
 version = "0.1"
 authors = [{name="Matthijs Westera", email="m.westera@hum.leidenuniv.nl"}]
-description = "Client for my awesome system"
+description = "Simple command-line utility for applying operations to .jsonl files per line, per key."
 readme = "README.md"
 requires-python = ">=3.7"
 
