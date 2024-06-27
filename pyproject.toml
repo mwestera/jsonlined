@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jsonlined"
+version = "0.1"
+authors = [{name="Matthijs Westera", email="m.westera@hum.leidenuniv.nl"}]
+description = "Client for my awesome system"
+readme = "README.md"
+requires-python = ">=3.7"
+
+
+[project.scripts]
+jsonlined = "jsonlined:jsonlined"
+jsonpiped = "jsonlined:jsonpiped"
+
+[project.urls]
+"Homepage" = "https://github.com/mwestera/jsonlined"
+"Bug Tracker" = "https://github.com/mwestera/jsonlined/issues"
