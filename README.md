@@ -48,7 +48,7 @@ Or, assuming we have a script `sentencize.py` for splitting a text into sentence
 per sentence, each with an `id` field derived from the original `id` field:
 
 ```bash
-$ cat test.jsonl | jsonpined [python sentencize.py] id,text sentence | less
+$ cat test.jsonl | jsonpiped [python sentencize.py] id,text sentence | less
 ```
 
 Here jsonpiped is used, because sentence.py operates on lines (not waiting for EOF). This is especially recommended
