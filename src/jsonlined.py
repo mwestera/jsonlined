@@ -43,13 +43,21 @@ def main():
 
 
 def jsonlined():
+
     args = parse_args()
-    _jsonlined(**args.__dict__)
+
+    if not args.command:
+        extract(args.key)
+    else:
+        _jsonlined(**args.__dict__)
 
 
 def jsonpiped():
     args = parse_args()
-    _jsonpiped(**args.__dict__)
+    if not args.command:
+        extract(args.key)
+    else:
+        _jsonpiped(**args.__dict__)
 
 
 def parse_args(include_piped_arg=False):
