@@ -26,6 +26,10 @@ Here jsonpiped is used, because sentence.py operates on lines (not waiting for E
 
 """
 
+
+# TODO: what if subprocess output is not a plain string but to be interpreted as e.g. a list of floats?
+
+
 def main():
 
     args = parse_args(include_piped_arg=True)
@@ -110,6 +114,9 @@ def parse_args(include_piped_arg=False):
 
 def extract(key):
     for line in sys.stdin:
+        if not line.strip():
+            continue
+
         dict = json.loads(line)
         value = dict[key]
         print(value)
@@ -118,6 +125,9 @@ def extract(key):
 def _jsonlined(key, result_key, keep, id, command):
 
     for line in sys.stdin:
+        if not line.strip():
+            continue
+
         dict = json.loads(line)
         value = dict[key]
         if not keep:
@@ -137,6 +147,9 @@ def _jsonpiped(key, result_key, keep, id, command):
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True)
 
     for line in sys.stdin:
+        if not line.strip():
+            continue
+
         dict = json.loads(line)
         value = dict[key]
 
