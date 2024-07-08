@@ -38,18 +38,18 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 def main():
 
-    args = parse_args(include_piped_arg=True, include_id_arg=True)
+    args = parse_args(include_piped_arg=True)
 
     if not args.command:
         extract(args.key)
 
     elif args.piped:
         del args.piped
-        _jsonpiped(**args.__dict__)
+        jsonpiped(**args.__dict__)
 
     else:
         del args.piped
-        _jsonlined(**args.__dict__)
+        jsonlined(**args.__dict__)
 
 
 
@@ -59,13 +59,15 @@ def parse_args(include_piped_arg=False):
 
     parser.add_argument('key', type=str, help='The key, ion the input jsonliens, from which to take values for processing.')
     parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key will be used for new values')
-    parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided)')
+    parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
+    parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (doubel newlines).')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
     if include_piped_arg:
         parser.add_argument('--piped', action='store_true', help='Whether to pipe into the nested process; alternatively runs a new process for each line.')
 
     args = []
 
+    # Manually identify the subprocess (given in square brackets):
     for a in sys.argv:
         if '[' not in a and ']' not in a:
             args.append(a)
@@ -167,7 +169,12 @@ def jsonpiped():
         process.stdin.write(value + '\n')
         process.stdin.flush()
 
-        for n, result_str in enumerate(process.stdout):
+        if args.onetomany:
+            result_strings = process.stdout
+        else:
+            result_strings = [process.stdout.readline()]
+
+        for n, result_str in enumerate(result_strings):
             result_str = result_str.rstrip()
             if not result_str:
                 break
