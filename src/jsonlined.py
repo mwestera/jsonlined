@@ -29,10 +29,10 @@ $ cat tests/test.jsonl | jsonpiped [python embed.py] text embedding
 
 Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- prerequisite is that operates line-swise (not waiting for EOF like wc). 
 
+If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
+
 """
 
-
-# TODO: what if subprocess output is not a plain string but to be interpreted as e.g. a list of floats?
 
 def main():
 
@@ -142,7 +142,11 @@ def _jsonlined(key, result_key, keep, id, command):
 
         process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=True)
         for n, outline in enumerate(process.stdout.splitlines()):
-            dict[result_key] = outline
+            try:
+                result = json.loads(outline)
+            except json.JSONDecodeError:
+                result = outline
+            dict[result_key] = result
             if id:
                 dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
             print(json.dumps(dict))
@@ -167,7 +171,12 @@ def _jsonpiped(key, result_key, keep, command):
         if not keep:
             del dict[key]
 
-        result = process.stdout.readline().rstrip()
+        result_str = process.stdout.readline().rstrip()
+        try:
+            result = json.loads(result_str)
+        except json.JSONDecodeError:
+            result = result_str
+
         dict[result_key] = result
         print(json.dumps(dict))
 
