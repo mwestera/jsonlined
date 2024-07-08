@@ -51,9 +51,7 @@ def main():
 
 
 def jsonlined():
-
-    args = parse_args(include_id_arg=True)
-
+    args = parse_args()
     if not args.command:
         extract(args.key)
     else:
@@ -61,22 +59,21 @@ def jsonlined():
 
 
 def jsonpiped():
-    args = parse_args(include_id_arg=False)
+    args = parse_args()
     if not args.command:
         extract(args.key)
     else:
         _jsonpiped(**args.__dict__)
 
 
-def parse_args(include_piped_arg=False, include_id_arg=False):
+def parse_args(include_piped_arg=False):
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
     parser.add_argument('key', type=str, help='The key, ion the input jsonliens, from which to take values for processing.')
     parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key will be used for new values')
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided)')
-    if include_id_arg:
-        parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
+    parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
     if include_piped_arg:
         parser.add_argument('--piped', action='store_true', help='Whether to pipe into the nested process; alternatively runs a new process for each line.')
 
@@ -140,7 +137,7 @@ def _jsonlined(key, result_key, keep, id, command):
             else:
                 command_filled.append(arg)
 
-        process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=True)
+        process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
         for n, outline in enumerate(process.stdout.splitlines()):
             try:
                 result = json.loads(outline)
@@ -152,9 +149,10 @@ def _jsonlined(key, result_key, keep, id, command):
             print(json.dumps(dict))
 
 
-def _jsonpiped(key, result_key, keep, command):
+def _jsonpiped(key, result_key, keep, id, command):
     os.environ['PYTHONUNBUFFERED'] = '1'
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=True)
+
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
 
     for line in sys.stdin:
         if not line.strip():
@@ -170,15 +168,20 @@ def _jsonpiped(key, result_key, keep, command):
 
         if not keep:
             del dict[key]
+        old_id = dict.get(id, None) if id else None
 
-        result_str = process.stdout.readline().rstrip()
-        try:
-            result = json.loads(result_str)
-        except json.JSONDecodeError:
-            result = result_str
-
-        dict[result_key] = result
-        print(json.dumps(dict))
+        for n, result_str in enumerate(process.stdout):
+            result_str = result_str.rstrip()
+            if not result_str:
+                break
+            try:
+                result = json.loads(result_str)
+            except json.JSONDecodeError:
+                result = result_str
+            dict[result_key] = result
+            if id:
+                dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
+            print(json.dumps(dict))
 
 
     process.stdin.close()
