@@ -31,6 +31,8 @@ Here jsonpiped is used, because embed.py requires considerable setup (loading mo
 
 If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
 
+In case the subprocess can output multiple new lines per original input line, make sure the bunches are separated by an empty line (double newline)...
+
 """
 
 
@@ -49,21 +51,6 @@ def main():
         del args.piped
         _jsonlined(**args.__dict__)
 
-
-def jsonlined():
-    args = parse_args()
-    if not args.command:
-        extract(args.key)
-    else:
-        _jsonlined(**args.__dict__)
-
-
-def jsonpiped():
-    args = parse_args()
-    if not args.command:
-        extract(args.key)
-    else:
-        _jsonpiped(**args.__dict__)
 
 
 def parse_args(include_piped_arg=False):
@@ -118,20 +105,25 @@ def extract(key):
         print(value)
 
 
-def _jsonlined(key, result_key, keep, id, command):
+def jsonlined():
+
+    args = parse_args()
+    if not args.command:
+        extract(args.key)
+        return
 
     for line in sys.stdin:
         if not line.strip():
             continue
 
         dict = json.loads(line)
-        value = dict[key]
-        if not keep:
-            del dict[key]
-        old_id = dict.get(id, None) if id else None
+        value = dict[args.key]
+        if not args.keep:
+            del dict[args.key]
+        old_id = dict.get(args.id, None) if args.id else None
 
         command_filled = []
-        for arg in command:
+        for arg in args.command:
             if arg.startswith('#'):
                 command_filled.append(dict[arg.lstrip('#')])
             else:
@@ -143,32 +135,37 @@ def _jsonlined(key, result_key, keep, id, command):
                 result = json.loads(outline)
             except json.JSONDecodeError:
                 result = outline
-            dict[result_key] = result
-            if id:
-                dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
+            dict[args.result_key] = result
+            if args.id:
+                dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
             print(json.dumps(dict))
 
 
-def _jsonpiped(key, result_key, keep, id, command):
+def jsonpiped():
+    args = parse_args()
+    if not args.command:
+        extract(args.key)
+        return
+
     os.environ['PYTHONUNBUFFERED'] = '1'
 
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
+    process = subprocess.Popen(args.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
 
     for line in sys.stdin:
         if not line.strip():
-            dict[result_key] = None
+            dict[args.result_key] = None
             print(json.dumps(dict))
             continue
 
         dict = json.loads(line)
-        value = dict[key]
+        value = dict[args.key]
+        if not args.keep:
+            del dict[args.key]
+
+        old_id = dict.get(args.id, None) if args.id else None
 
         process.stdin.write(value + '\n')
         process.stdin.flush()
-
-        if not keep:
-            del dict[key]
-        old_id = dict.get(id, None) if id else None
 
         for n, result_str in enumerate(process.stdout):
             result_str = result_str.rstrip()
@@ -178,9 +175,9 @@ def _jsonpiped(key, result_key, keep, id, command):
                 result = json.loads(result_str)
             except json.JSONDecodeError:
                 result = result_str
-            dict[result_key] = result
-            if id:
-                dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
+            dict[args.result_key] = result
+            if args.id:
+                dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
             print(json.dumps(dict))
 
 
