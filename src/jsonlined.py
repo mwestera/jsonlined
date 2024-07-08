@@ -4,6 +4,7 @@ import sys
 import json
 import subprocess
 import argparse
+import os
 
 
 """
@@ -20,15 +21,18 @@ Hypothetical example, assuming one has sentencize.py for splitting a text into s
  
 Get a bunch of jsonlines, extract the values under 'text', split each text into sentences, output a new json line per sentence, each with 'id' field derived from the original 'id' field:
 
-$ cat tests/test.jsonl | jsonpiped [python sentencize.py] id,text sentence | less
+$ cat tests/test.jsonl | jsonlined [python sentencize.py] id,text sentence
 
-Here jsonpiped is used, because sentence.py operates on lines (not waiting for EOF). 
+Another example, for computing text embeddings:
+
+$ cat tests/test.jsonl | jsonpiped [python embed.py] id,text embedding
+
+Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- prerequisite is that operates line-swise (not waiting for EOF like wc). 
 
 """
 
 
 # TODO: what if subprocess output is not a plain string but to be interpreted as e.g. a list of floats?
-
 
 def main():
 
@@ -96,8 +100,6 @@ def parse_args(include_piped_arg=False):
     if '[' in args:
         command = args[args.index('[') + 1:args.index(']')]
         args = args[:args.index('[')] + args[args.index(']')+1:]
-        if command[0] == 'python' and not '-u' in command:
-            command.insert(1, '-u')
     else:
         command = None
 
@@ -134,7 +136,7 @@ def _jsonlined(key, result_key, keep, id, command):
             del dict[key]
         old_id = dict.get(id, None) if id else None
 
-        process = subprocess.run(command, input=value, text=True, capture_output=True)
+        process = subprocess.run(command, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=True)
         for n, outline in enumerate(process.stdout.splitlines()):
             dict[result_key] = outline
             if id:
@@ -143,11 +145,13 @@ def _jsonlined(key, result_key, keep, id, command):
 
 
 def _jsonpiped(key, result_key, keep, id, command):
-
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True)
+    os.environ['PYTHONUNBUFFERED'] = '1'
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=True)
 
     for line in sys.stdin:
         if not line.strip():
+            dict[result_key] = None
+            print(json.dumps(dict))
             continue
 
         dict = json.loads(line)
@@ -162,14 +166,13 @@ def _jsonpiped(key, result_key, keep, id, command):
 
         n = 0
 
-        while result := process.stdout.readline().rstrip():
-            dict[result_key] = result
-            if id:
-                dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
-            print(json.dumps(dict))
-            n += 1
+        result = process.stdout.readline().rstrip()
+        dict[result_key] = result
+        if id:
+            dict[id] = f'{old_id}.{n}' if old_id else f'{n}'
+        print(json.dumps(dict))
+        n += 1
 
-        process.stdout.readline()  # skip final empty line
 
     process.stdin.close()
     process.wait()
