@@ -8,9 +8,10 @@ Sometimes I want to extract a value from each json line (say, the tweet's text u
 (like count the number of words, split it into sentences, or categorize its sentiment), and store the result under a new
 key in the original json dictionary.
 
-I wrote this small module to make this easier. Perhaps you will find it useful. I'm not an expert on bash/pipes/streams/subprocess/json/operating systems. No guarantees about it working correctly anywhere other than my own computer.
+I wrote this small module to make this easier. Perhaps you will find it useful. 
 
-Suggestions, issues, pull requests welcome!
+It uses Python's `suprocess` module, which is probably not ideal compared to relying on `bash` itself. I'm not an expert in bash/pipes/streams/subprocess/json/operating systems. No guarantees about it working correctly anywhere other than my own computer.
+
 
 
 ## Install ##
@@ -39,20 +40,28 @@ We can extract the values under `text`, pass them into another command, like Uni
 result in a new key `n_words`, keeping the original text:
 
 ```bash
-$ cat test.jsonl | jsonlined [wc -w] text n_words --keep
+$ cat tests/test.jsonl | jsonlined [wc -w] text nwords --keep
 ```
 
-Note the square brackets around the command that we want to execute 'per line'.
-
-Or, assuming we have a script `sentencize.py` for splitting a text into sentences, one can easily obtain a new json line
-per sentence, each with an `id` field derived from the original `id` field:
+Hypothetical example, assuming one has `sentencize.py` for splitting a text into sentences:
+ 
+Get a bunch of jsonlines, extract the values under 'text', split each text into sentences, output a new json line per sentence, each with 'id' field derived from the original 'id' field:
 
 ```bash
-$ cat test.jsonl | jsonpiped [python sentencize.py] id,text sentence | less
+$ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id 
 ```
 
-Here jsonpiped is used, because sentence.py operates on lines (not waiting for EOF). This is especially recommended
-for programs with considerable buildup/teardown cost, e.g., loading a language model.
+Another example, for computing text embeddings (assuming we have the script `embed.py` to operate on lines of `stdin`:
+
+```bash
+$ cat tests/test.jsonl | jsonpiped [python embed.py] text embedding
+```
+
+Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- prerequisite is that operates line-swise (not waiting for EOF like wc). 
+
+If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
+
+In case the subprocess can output multiple new lines per original input line, either use `jsonlined`, or (for `jsonpiped`) make sure the outputs-per-input are separated by an empty line (double newline).
 
 
 ## Related ##
