@@ -36,65 +36,47 @@ In case the subprocess can output multiple new lines per original input line, ma
 """
 
 
-def main():
 
-    args = parse_args(include_piped_arg=True)
-
-    if not args.command:
-        extract(args.key)
-
-    elif args.piped:
-        del args.piped
-        jsonpiped(**args.__dict__)
-
-    else:
-        del args.piped
-        jsonlined(**args.__dict__)
-
-
-
-def parse_args(include_piped_arg=False):
+def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
     parser.add_argument('key', type=str, help='The key, ion the input jsonliens, from which to take values for processing.')
     parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key will be used for new values')
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
-    parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (doubel newlines).')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
-    if include_piped_arg:
-        parser.add_argument('--piped', action='store_true', help='Whether to pipe into the nested process; alternatively runs a new process for each line.')
 
-    args = []
+    def parse_with_subprocess():
+        args = []
+        for a in sys.argv:
+            if '[' not in a and ']' not in a:
+                args.append(a)
+                continue
+            if a in ['[', ']']:
+                args.append(a)
+                continue
+            if a.startswith('['):
+                args.append('[')
+                a = a[1:]
+            if a.endswith(']'):
+                args.append(a[:-1])
+                args.append(']')
+            else:
+                args.append(a)
 
-    # Manually identify the subprocess (given in square brackets):
-    for a in sys.argv:
-        if '[' not in a and ']' not in a:
-            args.append(a)
-            continue
-        if a in ['[', ']']:
-            args.append(a)
-            continue
-        if a.startswith('['):
-            args.append('[')
-            a = a[1:]
-        if a.endswith(']'):
-            args.append(a[:-1])
-            args.append(']')
+        if '[' in args:
+            command = args[args.index('[') + 1:args.index(']')]
+            args = args[:args.index('[')] + args[args.index(']')+1:]
         else:
-            args.append(a)
+            command = None
+        args = argparse.ArgumentParser.parse_args(parser, args[1:])
+        args.command = command
 
-    if '[' in args:
-        command = args[args.index('[') + 1:args.index(']')]
-        args = args[:args.index('[')] + args[args.index(']')+1:]
-    else:
-        command = None
+        return args
 
-    args = parser.parse_args(args[1:])
+    parser.parse_args = parse_with_subprocess       # hmmmmm :D
 
-    args.command = command
-
-    return args
+    return parser
 
 
 def extract(key):
@@ -109,7 +91,12 @@ def extract(key):
 
 def jsonlined():
 
+    parser = build_argparser()
+    args = parser.parse_args()
+
     args = parse_args()
+
+
     if not args.command:
         extract(args.key)
         return
@@ -144,7 +131,15 @@ def jsonlined():
 
 
 def jsonpiped():
-    args = parse_args()
+
+    parser = build_argparser()
+    parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (doubel newlines).')
+
+    args = parser.parse_args()
+
+
+
+
     if not args.command:
         extract(args.key)
         return
@@ -191,6 +186,3 @@ def jsonpiped():
     process.stdin.close()
     process.wait()
 
-
-if __name__ == '__main__':
-    main()
