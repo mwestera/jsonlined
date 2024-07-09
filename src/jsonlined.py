@@ -72,6 +72,8 @@ def build_argparser():
         args = argparse.ArgumentParser.parse_args(parser, args[1:])
         args.command = command
 
+        args.result_key = args.result_key or args.key
+
         return args
 
     parser.parse_args = parse_with_subprocess       # hmmmmm :D
