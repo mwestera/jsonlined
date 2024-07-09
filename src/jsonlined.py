@@ -96,9 +96,6 @@ def jsonlined():
     parser = build_argparser()
     args = parser.parse_args()
 
-    args = parse_args()
-
-
     if not args.command:
         extract(args.key)
         return
@@ -138,9 +135,6 @@ def jsonpiped():
     parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (doubel newlines).')
 
     args = parser.parse_args()
-
-
-
 
     if not args.command:
         extract(args.key)
