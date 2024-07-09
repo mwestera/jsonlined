@@ -61,7 +61,7 @@ Here jsonpiped is used, because embed.py requires considerable setup (loading mo
 
 If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
 
-In case the subprocess can output multiple new lines per original input line, either use `jsonlined`, or (for `jsonpiped`) make sure the outputs-per-input are separated by an empty line (double newline).
+In case the subprocess can output multiple new lines per original input line, either use `jsonlined`, or -- for `jsonpiped` -- set `--onetomany` and make sure the subprocess outputs double newlines between inputs.
 
 
 ## Related ##
