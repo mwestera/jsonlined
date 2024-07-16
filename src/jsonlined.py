@@ -1,10 +1,11 @@
 #!/usr/bin/python
-
+import csv
 import sys
 import json
 import subprocess
 import argparse
 import os
+import io
 
 
 """
@@ -36,13 +37,15 @@ In case the subprocess can output multiple new lines per original input line, ma
 """
 
 
+# TODO: With multiple input keys,
+
 
 def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
-    parser.add_argument('key', type=str, help='The key, ion the input jsonliens, from which to take values for processing.')
-    parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key will be used for new values')
+    parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing.')
+    parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values')
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
 
@@ -69,10 +72,11 @@ def build_argparser():
             args = args[:args.index('[')] + args[args.index(']')+1:]
         else:
             command = None
-        args = argparse.ArgumentParser.parse_args(parser, args[1:])
+        args = argparse.ArgumentParser.parse_args(parser, args[1:]) # TODO pass kwargs
         args.command = command
 
-        args.result_key = args.result_key or args.key
+        args.keys = args.keys.split(',')
+        args.result_key = args.result_key or args.keys[0]
 
         return args
 
@@ -81,14 +85,16 @@ def build_argparser():
     return parser
 
 
-def extract(key):
+def extract(keys):
+
     for line in sys.stdin:
         if not line.strip():
+            print()
             continue
 
         dict = json.loads(line)
-        value = dict[key]
-        print(value)
+        values = [dict[key] for key in keys]
+        print(values_to_csv_if_multi(values))
 
 
 def jsonlined():
@@ -97,17 +103,23 @@ def jsonlined():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.key)
+        extract(args.keys)
         return
 
     for line in sys.stdin:
         if not line.strip():
+            dict[args.result_key] = None
+            print(json.dumps(dict))
             continue
 
         dict = json.loads(line)
-        value = dict[args.key]
+
+        values = [dict[key] for key in args.keys]
+        value = values_to_csv_if_multi(values)
+
         if not args.keep:
-            del dict[args.key]
+            for key in args.keys:
+                del dict[key]
         old_id = dict.get(args.id, None) if args.id else None
 
         command_filled = []
@@ -137,7 +149,7 @@ def jsonpiped():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.key)
+        extract(args.keys)
         return
 
     os.environ['PYTHONUNBUFFERED'] = '1'
@@ -151,9 +163,13 @@ def jsonpiped():
             continue
 
         dict = json.loads(line)
-        value = dict[args.key]
+
+        values = [dict[key] for key in args.keys]
+        value = values_to_csv_if_multi(values)
+
         if not args.keep:
-            del dict[args.key]
+            for key in args.keys:
+                del dict[key]
 
         old_id = dict.get(args.id, None) if args.id else None
 
@@ -182,3 +198,27 @@ def jsonpiped():
     process.stdin.close()
     process.wait()
 
+
+def make_csv_writer():
+
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+
+    def values_to_csv_if_multi(values):
+
+
+        if len(values) == 1:
+            return values[0]
+
+        csv_writer.writerow(values)
+        value = csv_buffer.getvalue().strip()
+
+        csv_buffer.seek(0)
+        csv_buffer.truncate(0)
+
+        return value
+
+    return values_to_csv_if_multi
+
+
+values_to_csv_if_multi = make_csv_writer()
