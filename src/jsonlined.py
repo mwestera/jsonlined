@@ -182,7 +182,7 @@ def jsonpiped():
             result_strings = [process.stdout.readline()]
 
         for n, result_str in enumerate(result_strings):
-            result_str = result_str.rstrip()
+            result_str = result_str.rstrip('\n')
             if not result_str:
                 break
             try:
