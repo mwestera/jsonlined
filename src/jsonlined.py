@@ -37,15 +37,13 @@ In case the subprocess can output multiple new lines per original input line, ma
 """
 
 
-# TODO: With multiple input keys,
-
-
 def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
     parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing.')
     parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values')
+    parser.add_argument('--filter', type=str, nargs='?', help='Keep only rows satisfying this filter; comma-separated list of key=value conditions.', default=None)
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
 
@@ -77,10 +75,11 @@ def build_argparser():
                 args.append(a)
 
         args = argparse.ArgumentParser.parse_args(parser, args[1:], **kwargs)
-        args.command = command
-
         args.keys = args.keys.split(',')
         args.result_key = args.result_key or args.keys[0]
+        args.command = command
+
+        args.filter = dict(a.split('=') for a in args.filter.split(',')) if args.filter else {}
 
         return args
 
@@ -89,7 +88,7 @@ def build_argparser():
     return parser
 
 
-def extract(keys):
+def extract(keys, filter=None):
 
     for line in sys.stdin:
         if not line.strip():
@@ -97,8 +96,12 @@ def extract(keys):
             continue
 
         dict = json.loads(line)
+
+        if any((condition := filter.get(key)) is not None and condition != value for key, value in dict.items()):
+            continue
+
         values = [dict[key] for key in keys]
-        print(values_to_csv_if_multi(values))
+        print(values_to_csv_if_multi(values))   # TODO: Probably want to allow jsonl output too? Or a separate 'jsondel' command for that...
 
 
 def jsonlined():
@@ -107,7 +110,7 @@ def jsonlined():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys)
+        extract(args.keys, args.filter)
         return
 
     for line in sys.stdin:
@@ -116,6 +119,10 @@ def jsonlined():
             continue
 
         dict = json.loads(line)
+
+        if any((condition := args.filter.get(key)) is not None and condition != value for key, value in dict.items()):
+            continue
+
 
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
@@ -165,6 +172,9 @@ def jsonpiped():
             continue
 
         dict = json.loads(line)
+
+        if any((condition := args.filter.get(key)) is not None and condition != value for key, value in dict.items()):
+            continue
 
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
