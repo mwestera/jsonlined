@@ -57,7 +57,7 @@ Another example, for computing text embeddings (assuming we have the script `emb
 $ cat tests/test.jsonl | jsonpiped [python embed.py] text embedding
 ```
 
-Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- prerequisite is that operates line-swise (not waiting for EOF like wc). 
+Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- a prerequisite is that it operates line-swise (not waiting for EOF like wc). 
 
 If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
 
