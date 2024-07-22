@@ -49,30 +49,34 @@ def build_argparser():
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
 
-    def parse_with_subprocess():
+    def parse_with_subprocess(**kwargs):
         args = []
+        command = []
+
+        is_in_command = False
+
         for a in sys.argv:
-            if '[' not in a and ']' not in a:
-                args.append(a)
+            if not is_in_command and a.startswith('['):
+                if a.endswith(']'):
+                    command.append(a[1:-1])
+                    continue
+                elif len(a) > 1:
+                    command.append(a[1:])
+                is_in_command = True
                 continue
-            if a in ['[', ']']:
-                args.append(a)
+
+            if is_in_command and a.endswith(']'):
+                if len(a) > 1:
+                    command.append(a[:-1])
+                is_in_command = False
                 continue
-            if a.startswith('['):
-                args.append('[')
-                a = a[1:]
-            if a.endswith(']'):
-                args.append(a[:-1])
-                args.append(']')
+
+            if is_in_command:
+                command.append(a)
             else:
                 args.append(a)
 
-        if '[' in args:
-            command = args[args.index('[') + 1:args.index(']')]
-            args = args[:args.index('[')] + args[args.index(']')+1:]
-        else:
-            command = None
-        args = argparse.ArgumentParser.parse_args(parser, args[1:]) # TODO pass kwargs
+        args = argparse.ArgumentParser.parse_args(parser, args[1:], **kwargs)
         args.command = command
 
         args.keys = args.keys.split(',')
@@ -108,8 +112,7 @@ def jsonlined():
 
     for line in sys.stdin:
         if not line.strip():
-            dict[args.result_key] = None
-            print(json.dumps(dict))
+            print()
             continue
 
         dict = json.loads(line)
