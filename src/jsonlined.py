@@ -36,8 +36,8 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 """
 
-# TODO: Refactor jsonlined and jsonpiped, considerable overlap
-# TODO: Allow filtering directly on subprocss stdout?  jsonlined [lastchar]=? question
+# TODO: Refactor jsonlined and jsonpiped, a lot of overlap
+# TODO: Add some logging.
 
 
 def build_argparser():
