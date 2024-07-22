@@ -158,8 +158,7 @@ def jsonpiped():
 
     for line in sys.stdin:
         if not line.strip():
-            dict[args.result_key] = None
-            print(json.dumps(dict))
+            print()
             continue
 
         dict = json.loads(line)
