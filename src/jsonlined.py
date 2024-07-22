@@ -36,20 +36,23 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 """
 
+# TODO: Refactor jsonlined and jsonpiped, considerable overlap
+# TODO: Allow filtering directly on subprocss stdout?  jsonlined [lastchar]=? question
+
 
 def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
-    parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing.')
-    parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values')
-    parser.add_argument('--filter', type=str, nargs='?', help='Keep only rows satisfying this filter; comma-separated list of key=value conditions.', default=None)
+    parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing, or key=value pairs, to filter.', default=None)
+    parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values', default=None)
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
 
     def parse_with_subprocess(**kwargs):
         args = []
         command = []
+        command_filter = None
 
         is_in_command = False
 
@@ -58,13 +61,22 @@ def build_argparser():
                 if a.endswith(']'):
                     command.append(a[1:-1])
                     continue
+                elif ']=' in a:
+                    b, command_filter = a[1:].split(']=')
+                    command.append(b)
+                    continue
                 elif len(a) > 1:
                     command.append(a[1:])
                 is_in_command = True
                 continue
 
-            if is_in_command and a.endswith(']'):
-                if len(a) > 1:
+            elif is_in_command and a.endswith(']') or ']=' in a:
+
+                if ']=' in a:
+                    b, command_filter = a.split(']=')
+                    if b:
+                        command.append(b)
+                elif len(a) > 1:
                     command.append(a[:-1])
                 is_in_command = False
                 continue
@@ -75,11 +87,20 @@ def build_argparser():
                 args.append(a)
 
         args = argparse.ArgumentParser.parse_args(parser, args[1:], **kwargs)
-        args.keys = args.keys.split(',')
-        args.result_key = args.result_key or args.keys[0]
-        args.command = command
 
-        args.filter = dict(a.split('=') for a in args.filter.split(',')) if args.filter else {}
+        keys_raw = args.keys.split(',') if args.keys else []
+        args.filter = dict(a.split('=') for a in keys_raw if '=' in a)
+        args.keys = [k for k in keys_raw if '=' not in k]
+        args.command = command
+        if command_filter:
+            try:
+                args.command_filter = json.loads(command_filter)
+            except json.JSONDecodeError:
+                args.command_filter = command_filter
+            args.keep = True
+        else:
+            args.command_filter = None
+        args.result_key = args.result_key or (args.keys[0] if args.keys and args.command_filter is None else None)
 
         return args
 
@@ -100,8 +121,12 @@ def extract(keys, filter=None):
         if any((condition := filter.get(key)) is not None and condition != value for key, value in dict.items()):
             continue
 
+        if not keys:
+            print(line, end='')
+            continue
+
         values = [dict[key] for key in keys]
-        print(values_to_csv_if_multi(values))   # TODO: Probably want to allow jsonl output too? Or a separate 'jsondel' command for that...
+        print(values_to_csv_if_multi(values))   # TODO: Probably want to allow jsonl output too?
 
 
 def jsonlined():
@@ -140,14 +165,21 @@ def jsonlined():
                 command_filled.append(arg)
 
         process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
-        for n, outline in enumerate(process.stdout.splitlines()):
+        for n, result_str in enumerate(process.stdout.splitlines()):
             try:
-                result = json.loads(outline)
+                result = json.loads(result_str)
             except json.JSONDecodeError:
-                result = outline
-            dict[args.result_key] = result
+                result = result_str
+
+            if args.command_filter and result != args.command_filter:
+                continue
+
+            if args.result_key:
+                dict[args.result_key] = result
+
             if args.id:
                 dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
+
             print(json.dumps(dict))
 
 
@@ -159,7 +191,7 @@ def jsonpiped():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys)
+        extract(args.keys, args.filter)
         return
 
     os.environ['PYTHONUNBUFFERED'] = '1'
@@ -197,13 +229,21 @@ def jsonpiped():
             result_str = result_str.rstrip('\n')
             if not result_str:
                 break
+
             try:
                 result = json.loads(result_str)
             except json.JSONDecodeError:
                 result = result_str
-            dict[args.result_key] = result
+
+            if args.command_filter and result != args.command_filter:
+                continue
+
+            if args.result_key:
+                dict[args.result_key] = result
+
             if args.id:
                 dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
+
             print(json.dumps(dict))
 
 

@@ -54,7 +54,13 @@ $ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id
 Or maybe we want it only for the lines where the "type" key has the value "submission":
 
 ```bash
-$ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id --filter type=submission 
+$ cat tests/test.jsonl | jsonlined [python sentencize.py] text,type=submission sentence --id id 
+```
+
+You can also filter on the output of the subprocess, for instance to get all texts with 10 words:
+
+```bash
+$ cat tests/test.jsonl | jsonlined [wc -w]=10 text
 ```
 
 Another example, for computing text embeddings (assuming we have the script `embed.py` to operate on lines of `stdin`:
@@ -63,7 +69,7 @@ Another example, for computing text embeddings (assuming we have the script `emb
 $ cat tests/test.jsonl | jsonpiped [python embed.py] text embedding
 ```
 
-Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- a prerequisite is that it operates line-swise (not waiting for EOF like wc). 
+This time, `jsonpiped` is used (instead of `jsonlined`), because embed.py requires considerable setup (loading model) -- a prerequisite is that it operates line-swise (not waiting for EOF like wc). 
 
 If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
 
