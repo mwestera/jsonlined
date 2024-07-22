@@ -93,10 +93,7 @@ def build_argparser():
         args.keys = [k for k in keys_raw if '=' not in k]
         args.command = command
         if command_filter:
-            try:
-                args.command_filter = json.loads(command_filter)
-            except json.JSONDecodeError:
-                args.command_filter = command_filter
+            args.command_filter = try_parse_as_json_list_or_dict(command_filter)
             args.keep = True
         else:
             args.command_filter = None
@@ -107,6 +104,16 @@ def build_argparser():
     parser.parse_args = parse_with_subprocess       # hmmmmm :D
 
     return parser
+
+
+def try_parse_as_json_list_or_dict(s):
+    try:
+        r = json.loads(s)
+    except json.JSONDecodeError:
+        r = s
+    if not isinstance(r, dict) and not isinstance(r, list):
+        r = s
+    return r
 
 
 def extract(keys, filter=None):
@@ -166,10 +173,7 @@ def jsonlined():
 
         process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
         for n, result_str in enumerate(process.stdout.splitlines()):
-            try:
-                result = json.loads(result_str)
-            except json.JSONDecodeError:
-                result = result_str
+            result = try_parse_as_json_list_or_dict(result_str)
 
             if args.command_filter and result != args.command_filter:
                 continue
@@ -230,10 +234,7 @@ def jsonpiped():
             if not result_str:
                 break
 
-            try:
-                result = json.loads(result_str)
-            except json.JSONDecodeError:
-                result = result_str
+            result = try_parse_as_json_list_or_dict(result_str)
 
             if args.command_filter and result != args.command_filter:
                 continue
