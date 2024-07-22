@@ -51,6 +51,12 @@ Get a bunch of jsonlines, extract the values under 'text', split each text into 
 $ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id 
 ```
 
+Or maybe we want it only for the lines where the "type" key has the value "submission":
+
+```bash
+$ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id --filter type=submission 
+```
+
 Another example, for computing text embeddings (assuming we have the script `embed.py` to operate on lines of `stdin`:
 
 ```bash
