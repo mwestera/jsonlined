@@ -6,6 +6,7 @@ import subprocess
 import argparse
 import os
 import io
+import logging
 
 
 """
@@ -52,6 +53,7 @@ def build_argparser():
     parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing, or key=value pairs, to filter.', default=None)
     parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values', default=None)
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
+    parser.add_argument('--flat', action='store_true', help='If result of subprocess is a json dictionary, will insert these keys (overrides result_key).')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
 
     def parse_with_subprocess(**kwargs):
@@ -104,7 +106,11 @@ def build_argparser():
                 args.command_filter = RETURN_STATUS
         else:
             args.command_filter = None
-        args.result_key = args.result_key or (args.keys[0] if args.keys and args.command_filter is None else None)
+        args.result_key = args.result_key or (args.keys[0] if args.keys and args.command_filter is None and not args.flat else None)
+
+        if args.flat and args.result_key:
+            logging.warning('--flat overrides result_key, ignoring the latter.')
+            args.result_key = None
 
         return args
 
@@ -194,6 +200,9 @@ def jsonlined():
             if args.result_key:
                 dict[args.result_key] = result
 
+            if args.flat:
+                dict.update(result)
+
             if args.id:
                 dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
 
@@ -259,6 +268,9 @@ def jsonpiped():
 
             if args.result_key:
                 dict[args.result_key] = result
+
+            if args.flat:
+                dict.update(result)
 
             if args.id:
                 dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
