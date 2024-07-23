@@ -38,6 +38,11 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 # TODO: Refactor jsonlined and jsonpiped, a lot of overlap
 # TODO: Add some logging.
+# TODO: Allow extraction from nested json structures.
+
+
+class RETURN_STATUS:
+    pass
 
 
 def build_argparser():
@@ -92,9 +97,11 @@ def build_argparser():
         args.filter = dict(a.split('=') for a in keys_raw if '=' in a)
         args.keys = [k for k in keys_raw if '=' not in k]
         args.command = command
-        if command_filter:
+        if command_filter is not None:
             args.command_filter = try_parse_as_json_list_or_dict(command_filter)
             args.keep = True
+            if not command_filter:
+                args.command_filter = RETURN_STATUS
         else:
             args.command_filter = None
         args.result_key = args.result_key or (args.keys[0] if args.keys and args.command_filter is None else None)
@@ -159,11 +166,6 @@ def jsonlined():
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
 
-        if not args.keep:
-            for key in args.keys:
-                del dict[key]
-        old_id = dict.get(args.id, None) if args.id else None
-
         command_filled = []
         for arg in args.command:
             if arg.startswith('#'):
@@ -172,11 +174,22 @@ def jsonlined():
                 command_filled.append(arg)
 
         process = subprocess.run(command_filled, input=value, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
+
+        if args.command_filter == RETURN_STATUS:
+            if process.returncode == 0:
+                print(line, end='')
+            continue
+
+        if not args.keep:
+            for key in args.keys:
+                del dict[key]
+        old_id = dict.get(args.id, None) if args.id else None
+
         for n, result_str in enumerate(process.stdout.splitlines()):
             result = try_parse_as_json_list_or_dict(result_str)
 
             if args.command_filter and result != args.command_filter:
-                continue
+                    continue
 
             if args.result_key:
                 dict[args.result_key] = result
@@ -215,19 +228,24 @@ def jsonpiped():
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
 
-        if not args.keep:
-            for key in args.keys:
-                del dict[key]
-
-        old_id = dict.get(args.id, None) if args.id else None
-
         process.stdin.write(value + '\n')
         process.stdin.flush()
+
+        if args.command_filter == RETURN_STATUS:
+            if process.returncode == 0:
+                print(line, end='')
+            continue
 
         if args.onetomany:
             result_strings = process.stdout
         else:
             result_strings = [process.stdout.readline()]
+
+        if not args.keep:
+            for key in args.keys:
+                del dict[key]
+
+        old_id = dict.get(args.id, None) if args.id else None
 
         for n, result_str in enumerate(result_strings):
             result_str = result_str.rstrip('\n')
@@ -236,7 +254,7 @@ def jsonpiped():
 
             result = try_parse_as_json_list_or_dict(result_str)
 
-            if args.command_filter and result != args.command_filter:
+            if args.command_filter and args.command_filter != RETURN_STATUS and result != args.command_filter:
                 continue
 
             if args.result_key:
