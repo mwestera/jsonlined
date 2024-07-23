@@ -7,6 +7,9 @@ import argparse
 import os
 import io
 import logging
+import functools
+
+logging.basicConfig(level=logging.INFO)
 
 
 """
@@ -37,7 +40,6 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 """
 
-# TODO: Refactor jsonlined and jsonpiped, a lot of overlap
 # TODO: Add some logging.
 # TODO: Allow extraction from nested json structures.
 
@@ -64,6 +66,8 @@ def build_argparser():
         is_in_command = False
 
         for a in sys.argv:
+            # TODO apply shlex.split() to the command in case it's a single "[...]" string.
+            # TODO refactor with regex
             if not is_in_command and a.startswith('['):
                 if a.endswith(']'):
                     command.append(a[1:-1])
@@ -146,10 +150,12 @@ def extract(keys, filter=None):
             continue
 
         values = [dict[key] for key in keys]
-        print(values_to_csv_if_multi(values))   # TODO: Probably want to allow jsonl output too?
+        print(values_to_csv_if_multi(values))
 
 
 def jsonlined():
+
+    # TODO Refactor; overlap with jsonpiped
 
     parser = build_argparser()
     args = parser.parse_args()
@@ -167,7 +173,6 @@ def jsonlined():
 
         if any((condition := args.filter.get(key)) is not None and condition != value for key, value in dict.items()):
             continue
-
 
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
@@ -195,7 +200,7 @@ def jsonlined():
             result = try_parse_as_json_list_or_dict(result_str)
 
             if args.command_filter and result != args.command_filter:
-                    continue
+                continue
 
             if args.result_key:
                 dict[args.result_key] = result
@@ -212,7 +217,7 @@ def jsonlined():
 def jsonpiped():
 
     parser = build_argparser()
-    parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (doubel newlines).')
+    parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (double newlines).')
 
     args = parser.parse_args()
 
@@ -220,11 +225,20 @@ def jsonpiped():
         extract(args.keys, args.filter)
         return
 
+    if args.command_filter == RETURN_STATUS:
+        logging.warning('Filtering subprocess on return status (... [subprocess]= ...) ignored; for this, use jsonlined instead.')
+        args.command_filter = None
+
     os.environ['PYTHONUNBUFFERED'] = '1'
 
     process = subprocess.Popen(args.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
+    os.set_blocking(process.stdout.fileno(), False)  ## https://stackoverflow.com/a/59291466
+
+    inputs_fed = []
+    process_outputs = functools.partial(process_outputs_match_to_inputs, inputs_fed, process.stdout, onetomany=args.onetomany, id=args.id, command_filter=args.command_filter, result_key=args.result_key, flat=args.flat)
 
     for line in sys.stdin:
+
         if not line.strip():
             print()
             continue
@@ -237,49 +251,62 @@ def jsonpiped():
         values = [dict[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
 
-        process.stdin.write(value + '\n')
-        process.stdin.flush()
-
-        if args.command_filter == RETURN_STATUS:
-            if process.returncode == 0:
-                print(line, end='')
-            continue
-
-        if args.onetomany:
-            result_strings = process.stdout
-        else:
-            result_strings = [process.stdout.readline()]
-
         if not args.keep:
             for key in args.keys:
                 del dict[key]
 
-        old_id = dict.get(args.id, None) if args.id else None
+        process.stdin.write(value + '\n')
+        process.stdin.flush()
 
-        for n, result_str in enumerate(result_strings):
-            result_str = result_str.rstrip('\n')
-            if not result_str:
-                break
+        inputs_fed.append(dict)
 
-            result = try_parse_as_json_list_or_dict(result_str)
-
-            if args.command_filter and args.command_filter != RETURN_STATUS and result != args.command_filter:
-                continue
-
-            if args.result_key:
-                dict[args.result_key] = result
-
-            if args.flat:
-                dict.update(result)
-
-            if args.id:
-                dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
-
-            print(json.dumps(dict))
+        for result in process_outputs():
+            print(json.dumps(result))
 
 
+    os.set_blocking(process.stdout.fileno(), True)
     process.stdin.close()
     process.wait()
+
+    for result in process_outputs():
+        print(json.dumps(result))
+
+
+n_outputs_for_current_input = 0 # for numbering the outputs per input (--id)
+
+def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False, id=None, command_filter=None, result_key=None, flat=False):
+    global n_outputs_for_current_input
+
+    while line := output_buffer.readline():
+
+        line_stripped = line.rstrip('\n')
+        if onetomany:
+            if not line_stripped:
+                inputs_given.pop(0) # empty line means outputs correspond to new input!
+                n_outputs_for_current_input = 0
+            stored_input = inputs_given[0].copy()
+        else:
+            stored_input = inputs_given.pop(0).copy()
+
+        old_id = stored_input.get(id, None) if id else None
+
+        result = try_parse_as_json_list_or_dict(line_stripped)
+
+        if onetomany and not result:    # not sure why the first is always empty...
+            continue
+
+        if command_filter and result != command_filter:
+            continue
+        if result_key:
+            stored_input[result_key] = result
+        if flat:
+            stored_input.update(result)
+        if id:
+            stored_input[id] = f'{old_id}.{n_outputs_for_current_input}' if old_id else f'{n_outputs_for_current_input}'
+
+        yield stored_input
+
+        n_outputs_for_current_input += 1
 
 
 def make_csv_writer():
