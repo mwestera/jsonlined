@@ -42,6 +42,7 @@ In case the subprocess can output multiple new lines per original input line, ma
 
 # TODO: Add some logging.
 # TODO: Allow extraction from nested json structures.
+# TODO: allow non-string and non-dict data types of return values
 
 
 class RETURN_STATUS:
@@ -57,6 +58,7 @@ def build_argparser():
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--flat', action='store_true', help='If result of subprocess is a json dictionary, will insert these keys (overrides result_key).')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
+    parser.add_argument('--header', action='store_true', help='If no subprocess, print header prior to extracted values.')
 
     def parse_with_subprocess(**kwargs):
         args = []
@@ -104,7 +106,7 @@ def build_argparser():
         args.keys = [k for k in keys_raw if '=' not in k]
         args.command = command
         if command_filter is not None:
-            args.command_filter = try_parse_as_json_list_or_dict(command_filter)
+            args.command_filter = try_parse_as_json(command_filter)
             args.keep = True
             if not command_filter:
                 args.command_filter = RETURN_STATUS
@@ -123,17 +125,20 @@ def build_argparser():
     return parser
 
 
-def try_parse_as_json_list_or_dict(s):
+def try_parse_as_json(s):
     try:
         r = json.loads(s)
     except json.JSONDecodeError:
         r = s
-    if not isinstance(r, dict) and not isinstance(r, list):
-        r = s
+    # if not isinstance(r, dict) and not isinstance(r, list):
+    #     r = s
     return r
 
 
-def extract(keys, filter=None):
+def extract(keys, filter=None, header=False):
+
+    if header:
+        print(values_to_csv_if_multi(keys))
 
     for line in sys.stdin:
         if not line.strip():
@@ -161,7 +166,7 @@ def jsonlined():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys, args.filter)
+        extract(args.keys, args.filter, args.header)
         return
 
     for line in sys.stdin:
@@ -197,7 +202,7 @@ def jsonlined():
         old_id = dict.get(args.id, None) if args.id else None
 
         for n, result_str in enumerate(process.stdout.splitlines()):
-            result = try_parse_as_json_list_or_dict(result_str)
+            result = try_parse_as_json(result_str)
 
             if args.command_filter and result != args.command_filter:
                 continue
@@ -222,7 +227,7 @@ def jsonpiped():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys, args.filter)
+        extract(args.keys, args.filter, args.header)
         return
 
     if args.command_filter == RETURN_STATUS:
@@ -290,7 +295,7 @@ def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False
 
         old_id = stored_input.get(id, None) if id else None
 
-        result = try_parse_as_json_list_or_dict(line_stripped)
+        result = try_parse_as_json(line_stripped)
 
         if onetomany and not result:    # not sure why the first is always empty...
             continue
@@ -316,9 +321,8 @@ def make_csv_writer():
 
     def values_to_csv_if_multi(values):
 
-
         if len(values) == 1:
-            return values[0]
+            return str(values[0])
 
         csv_writer.writerow(values)
         value = csv_buffer.getvalue().strip()
