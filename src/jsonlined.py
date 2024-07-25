@@ -271,10 +271,15 @@ def jsonpiped():
 
     os.set_blocking(process.stdout.fileno(), True)
     process.stdin.close()
-    process.wait()
-
-    for result in process_outputs():
-        print(json.dumps(result))
+    while True:
+        try:
+            process.wait(.5)
+        except subprocess.TimeoutExpired:
+            pass
+        for result in process_outputs():
+            print(json.dumps(result))
+        if process.poll() is not None:
+            break
 
 
 n_outputs_for_current_input = 0 # for numbering the outputs per input (--id)
