@@ -294,7 +294,7 @@ def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False
             if not line_stripped:
                 inputs_given.pop(0) # empty line means outputs correspond to new input!
                 n_outputs_for_current_input = 0
-            stored_input = inputs_given[0].copy()
+            stored_input = inputs_given[0].copy()    # TODO: If outputs end with empty line (no new inputs available), this crashes.
         else:
             stored_input = inputs_given.pop(0).copy()
 
