@@ -49,6 +49,9 @@ class RETURN_STATUS:
     pass
 
 
+PIPEFLAG = '%PIPE'  # To let user signify using a named pipe to feed data to subprocess.
+
+
 def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
@@ -247,7 +250,22 @@ def jsonpiped():
 
     os.environ['PYTHONUNBUFFERED'] = '1'
 
-    process = subprocess.Popen(args.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
+    feed_through_stdin = PIPEFLAG not in args.command   # i.e., as a separate list item
+
+    if feed_through_stdin:
+        stdin_for_subprocess = subprocess.PIPE
+    else:
+        pipename = 'fifopipe'
+        try:
+            os.mkfifo(pipename, mode=0o777)
+        except FileExistsError:
+            pass
+        args.command[args.command.index(PIPEFLAG)] = pipename
+        stdin_for_subprocess=None
+        read_end = os.open(pipename, os.O_RDONLY | os.O_NONBLOCK)
+        write_end = os.open(pipename, os.O_WRONLY)
+
+    process = subprocess.Popen(args.command, stdin=stdin_for_subprocess, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, shell=False)
     os.set_blocking(process.stdout.fileno(), False)  ## https://stackoverflow.com/a/59291466
 
     inputs_fed = []
@@ -271,8 +289,11 @@ def jsonpiped():
             for key in args.keys:
                 del dict[key]
 
-        process.stdin.write(value + '\n')
-        process.stdin.flush()
+        if feed_through_stdin:
+            process.stdin.write(value + '\n')
+            process.stdin.flush()
+        else:
+            os.write(write_end, bytes(value + '\n', 'utf-8'))
 
         inputs_fed.append(dict)
 
@@ -281,7 +302,12 @@ def jsonpiped():
 
 
     os.set_blocking(process.stdout.fileno(), True)
-    process.stdin.close()
+    if feed_through_stdin:
+        process.stdin.close()
+    else:
+        os.close(write_end)
+        os.close(read_end)
+
     while True:
         try:
             process.wait(.5)
