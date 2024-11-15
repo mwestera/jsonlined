@@ -12,34 +12,6 @@ import functools
 logging.basicConfig(level=logging.INFO)
 
 
-"""
-Author: Matthijs Westera
-
-
-Examples:
-
-Get a bunch of jsonlines, extract the values under 'text', pass them into the command in square brackets, and store the result in a new key 'nwords', keeping the original text: 
-
-$ cat tests/test.jsonl | jsonlined [wc -w] text nwords --keep
-
-Hypothetical example, assuming one has sentencize.py for splitting a text into sentences:
- 
-Get a bunch of jsonlines, extract the values under 'text', split each text into sentences, output a new json line per sentence, each with 'id' field derived from the original 'id' field:
-
-$ cat tests/test.jsonl | jsonlined [python sentencize.py] text sentence --id id 
-
-Another example, for computing text embeddings:
-
-$ cat tests/test.jsonl | jsonpiped [python embed.py] text embedding
-
-Here jsonpiped is used, because embed.py requires considerable setup (loading model) -- prerequisite is that operates line-swise (not waiting for EOF like wc). 
-
-If subprocess outputs json format, this will be interpreted as such; otherwise literal string.
-
-In case the subprocess can output multiple new lines per original input line, make sure the bunches are separated by an empty line (double newline)...
-
-"""
-
 # TODO: Add some logging.
 # TODO: Allow extraction from nested json structures.
 # TODO: allow non-string and non-dict data types of return values
