@@ -9,8 +9,6 @@ import io
 import logging
 import functools
 
-logging.basicConfig(level=logging.INFO)
-
 
 # TODO: Add some logging.
 # TODO: Allow extraction from nested json structures.
@@ -354,3 +352,4 @@ def make_csv_writer():
 
 
 values_to_csv_if_multi = make_csv_writer()
+
