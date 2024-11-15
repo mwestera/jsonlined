@@ -13,7 +13,7 @@ import functools
 # TODO: Add some logging.
 # TODO: Allow extraction from nested json structures.
 # TODO: allow non-string and non-dict data types of return values
-
+# TODO: Make --keep the default behavior.
 
 class RETURN_STATUS:
     pass
