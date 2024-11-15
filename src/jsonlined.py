@@ -54,7 +54,7 @@ def build_argparser():
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
     parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing, or key=value pairs, to filter.', default=None)
-    parser.add_argument('result_key', type=str, nargs='?', help='The new key; if not given, old key (or first one, if multiple provided) will be used for new values', default=None)
+    parser.add_argument('result_keys', type=str, nargs='?', help='The new keys; if not given, old keys will be used for storing new values', default=None)
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
     parser.add_argument('--flat', action='store_true', help='If result of subprocess is a json dictionary, will insert these keys (overrides result_key).')
     parser.add_argument('--id', type=str, nargs='?', help='Which key (if any) to use for ids. Only relevant if input line may map to multiple output lines.')
@@ -104,6 +104,7 @@ def build_argparser():
         keys_raw = args.keys.split(',') if args.keys else []
         args.filter = dict(a.split('=') for a in keys_raw if '=' in a)
         args.keys = [k for k in keys_raw if '=' not in k]
+        args.result_keys = args.result_keys.split(',') if args.result_keys else []
         args.command = command
         if command_filter is not None:
             args.command_filter = try_parse_as_json(command_filter)
@@ -112,11 +113,11 @@ def build_argparser():
                 args.command_filter = RETURN_STATUS
         else:
             args.command_filter = None
-        args.result_key = args.result_key or (args.keys[0] if args.keys and args.command_filter is None and not args.flat else None)
+        args.result_keys = args.result_keys or (args.keys if args.keys and args.command_filter is None and not args.flat else None)
 
-        if args.flat and args.result_key:
-            logging.warning('--flat overrides result_key, ignoring the latter.')
-            args.result_key = None
+        if args.flat and args.result_keys:
+            logging.warning('--flat overrides result_keys, ignoring the latter.')
+            args.result_keys = None
 
         return args
 
@@ -174,18 +175,18 @@ def jsonlined():
             print()
             continue
 
-        dict = json.loads(line)
+        item = json.loads(line)
 
-        if any((condition := args.filter.get(key)) is not None and condition != value for key, value in dict.items()):
+        if any((condition := args.filter.get(key)) is not None and condition != value for key, value in item.items()):
             continue
 
-        values = [dict[key] for key in args.keys]
+        values = [item[key] for key in args.keys]
         value = values_to_csv_if_multi(values)
 
         command_filled = []
         for arg in args.command:
             if arg.startswith('#'):
-                command_filled.append(dict[arg.lstrip('#')])
+                command_filled.append(item[arg.lstrip('#')])
             else:
                 command_filled.append(arg)
 
@@ -198,8 +199,8 @@ def jsonlined():
 
         if not args.keep:
             for key in args.keys:
-                del dict[key]
-        old_id = dict.get(args.id, None) if args.id else None
+                del item[key]
+        old_id = item.get(args.id, None) if args.id else None
 
         for n, result_str in enumerate(process.stdout.splitlines()):
             result = try_parse_as_json(result_str)
@@ -207,22 +208,27 @@ def jsonlined():
             if args.command_filter and result != args.command_filter:
                 continue
 
-            if args.result_key:
-                dict[args.result_key] = result
+            if args.result_keys:
+                if len(args.result_keys) == 1:
+                    item[args.result_keys[0]] = result
+                else:
+                    result = next(csv.reader([result]))
+                    item.update(dict(zip(args.result_keys, result)))
 
             if args.flat:
-                dict.update(result)
+                item.update(result)
 
             if args.id:
-                dict[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
+                item[args.id] = f'{old_id}.{n}' if old_id else f'{n}'
 
-            print(json.dumps(dict))
+            print(json.dumps(item))
 
 
 def jsonpiped():
 
     parser = build_argparser()
     parser.add_argument('--onetomany', action='store_true', help='Whether the subprocess can yield multiple outputs for a single input -- if so, the blocks must be separated by empty lines (double newlines).')
+    # TODO: This argument makes sense for jsonlined, too.
 
     args = parser.parse_args()
 
@@ -240,7 +246,7 @@ def jsonpiped():
     os.set_blocking(process.stdout.fileno(), False)  ## https://stackoverflow.com/a/59291466
 
     inputs_fed = []
-    process_outputs = functools.partial(process_outputs_match_to_inputs, inputs_fed, process.stdout, onetomany=args.onetomany, id=args.id, command_filter=args.command_filter, result_key=args.result_key, flat=args.flat)
+    process_outputs = functools.partial(process_outputs_match_to_inputs, inputs_fed, process.stdout, onetomany=args.onetomany, id=args.id, command_filter=args.command_filter, result_keys=args.result_keys, flat=args.flat)
 
     for line in sys.stdin:
 
@@ -284,7 +290,7 @@ def jsonpiped():
 
 n_outputs_for_current_input = 0 # for numbering the outputs per input (--id)
 
-def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False, id=None, command_filter=None, result_key=None, flat=False):
+def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False, id=None, command_filter=None, result_keys=None, flat=False):
     global n_outputs_for_current_input
 
     while line := output_buffer.readline():
@@ -307,8 +313,12 @@ def process_outputs_match_to_inputs(inputs_given, output_buffer, onetomany=False
 
         if command_filter and result != command_filter:
             continue
-        if result_key:
-            stored_input[result_key] = result
+        if result_keys:
+            if len(result_keys) == 1:
+                stored_input[result_keys[0]] = result
+            else:
+                result = next(csv.reader([result]))
+                stored_input.update(dict(zip(result_keys, result)))
         if flat:
             stored_input.update(result)
         if id:
