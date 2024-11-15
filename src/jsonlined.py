@@ -53,6 +53,7 @@ def build_argparser():
 
     parser = argparse.ArgumentParser(description="Processing a specific keyed value of a .jsonl file, line by line. Example to count words using wc:  $ cat test.jsonl | jsonlined [wc -w] id,text tokens --keep")
 
+    parser.add_argument("file", type=argparse.FileType('r'), help=".jsonl file, or - for stdin, or else stdin (file can be omitted without ambiguity, provided ONLY the file and keys args are given before the subprocess [...].)")
     parser.add_argument('keys', type=str, help='The key, in the input jsonliens, or multiple keys separated by commas, from which to take values for processing, or key=value pairs, to filter.', default=None)
     parser.add_argument('result_keys', type=str, nargs='?', help='The new keys; if not given, old keys will be used for storing new values', default=None)
     parser.add_argument('--keep', action='store_true', help='Whether to keep the original key (only if new key is provided.')
@@ -67,10 +68,14 @@ def build_argparser():
 
         is_in_command = False
 
-        for a in sys.argv:
+        for n, a in enumerate(sys.argv):
             # TODO apply shlex.split() to the command in case it's a single "[...]" string.
             # TODO refactor with regex
             if not is_in_command and a.startswith('['):
+
+                if n <= 2:
+                    args.insert(1, '-')
+
                 if a.endswith(']'):
                     command.append(a[1:-1])
                     continue
@@ -136,12 +141,12 @@ def try_parse_as_json(s):
     return r
 
 
-def extract(keys, filter=None, header=False):
+def extract(file, keys, filter=None, header=False):
 
     if header:
         print(values_to_csv_if_multi(keys))
 
-    for line in sys.stdin:
+    for line in file:
         if not line.strip():
             print()
             continue
@@ -167,10 +172,10 @@ def jsonlined():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys, args.filter, args.header)
+        extract(args.file, args.keys, args.filter, args.header)
         return
 
-    for line in sys.stdin:
+    for line in args.file:
         if not line.strip():
             print()
             continue
@@ -233,7 +238,7 @@ def jsonpiped():
     args = parser.parse_args()
 
     if not args.command:
-        extract(args.keys, args.filter, args.header)
+        extract(args.file, args.keys, args.filter, args.header)
         return
 
     if args.command_filter == RETURN_STATUS:
@@ -248,7 +253,7 @@ def jsonpiped():
     inputs_fed = []
     process_outputs = functools.partial(process_outputs_match_to_inputs, inputs_fed, process.stdout, onetomany=args.onetomany, id=args.id, command_filter=args.command_filter, result_keys=args.result_keys, flat=args.flat)
 
-    for line in sys.stdin:
+    for line in args.file:
 
         if not line.strip():
             print()
