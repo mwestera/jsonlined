@@ -337,8 +337,10 @@ def make_csv_writer():
 
     def values_to_csv_if_multi(values):
 
+        values = [json.dumps(d) if isinstance(d, list) or isinstance(d, dict) else str(d) for d in values]
+
         if len(values) == 1:
-            return str(values[0])
+            return values[0]
 
         csv_writer.writerow(values)
         value = csv_buffer.getvalue().strip()
